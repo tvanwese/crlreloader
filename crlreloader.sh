@@ -15,8 +15,9 @@ LAST_CRL_NUM_FILE=/root/Tom/cert_location/externalCrlLocations/lastCrlNumber.txt
 EXTERNAL_CRL_LOCATION_TMP=/tmp/externalCrlLocations
 TMP_URL=/tmp/url.txt
 
-IP_LOADBALANCER=10.168.47.29
-PORT_LOADBALANCER=7080
+VSD_MGMT_IP=10.168.47.29
+VSD_PORT=7080
+F5_MGMT_IP=10.171.47.23
 
 GREP=/bin/egrep
 OPENSSL=/usr/bin/openssl
@@ -34,8 +35,8 @@ URL=`${OPENSSL} x509 -in ${KEYS_DIR}/${PROXY_USER}.pem -noout -text | ${GREP} cm
 echo "this is the URL before changing: $URL"
 echo "$URL" > $TMP_URL
 
-#look in the url file for the xmpp and replace it by the loadbalancer IP
-$SED -i 's/xmpp.*7080/'$IP_LOADBALANCER':'$PORT_LOADBALANCER'/g' $TMP_URL
+#look in the url file for the xmpp and replace it by the correct IP / XMPP
+$SED -i 's/xmpp.*7080/'$VSD_MGMT_IP':'$VSD_PORT'/g' $TMP_URL
 
 #Replace URL with the value front the edited file TMP_URL
 URL=$(cat $TMP_URL)
@@ -80,8 +81,8 @@ if [ -f ${LAST_CRL_NUM_FILE} ]; then
         ${CAT} ${TMP_CONCAT_CRL_FILE} > ${CRL_FILE}
         ${ECHO} 'CRL Numbers no longer matching.  Reloading CRL profile.'
 mv $CRL_FILE $VSPCA_FILE
-sshpass -p "default" scp $VSPCA_FILE root@10.171.47.23:/tmp/
-sshpass -p "default" ssh root@10.171.47.23 tmsh modify sys file ssl-crl vspca.crl source-path file:/tmp/vspca.pem
+sshpass -p "default" scp $VSPCA_FILE root@$F5_MGMT_IP:/tmp/
+sshpass -p "default" ssh root@$F5_MGMT_IP tmsh modify sys file ssl-crl vspca.crl source-path file:/tmp/vspca.pem
         # Update the lastCrlNumber file with the new number
         ${ECHO} $CRL_NO_TOTAL > ${LAST_CRL_NUM_FILE}
     fi
@@ -91,8 +92,9 @@ else
     ${CAT} ${TMP_CONCAT_CRL_FILE} > ${CRL_FILE}
       ${ECHO} 'Reloading CRL profile.'
 mv $CRL_FILE $VSPCA_FILE
-sshpass -p "default" scp $VSPCA_FILE root@10.171.47.23:/tmp/
-sshpass -p "default" ssh root@10.171.47.23 tmsh modify sys file ssl-crl vspca.crl source-path file:/tmp/vspca.pem
+sshpass -p "default" scp $VSPCA_FILE root@$F5_MGMT_IP:/tmp/
+sshpass -p "default" ssh root@$F5_MGMT_IP tmsh modify sys file ssl-crl vspca.crl source-path file:/tmp/vspca.pem
 # Update the lastCrlNumber file with the new number
     ${ECHO} $CRL_NO_TOTAL > ${LAST_CRL_NUM_FILE}
 fi
+
