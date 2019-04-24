@@ -13,6 +13,10 @@ TMP_CRL_FILE=/tmp/crl.pem
 TMP_CONCAT_CRL_FILE=/tmp/concat_crl.pem
 LAST_CRL_NUM_FILE=/root/Tom/cert_location/externalCrlLocations/lastCrlNumber.txt
 EXTERNAL_CRL_LOCATION_TMP=/tmp/externalCrlLocations
+TMP_URL=/tmp/url.txt
+
+IP_LOADBALANCER=10.168.47.29
+PORT_LOADBALANCER=7080
 
 GREP=/bin/egrep
 OPENSSL=/usr/bin/openssl
@@ -21,9 +25,23 @@ CAT=/bin/cat
 SERVICE=/sbin/service
 ECHO=/bin/echo
 CURL=/usr/bin/curl
+SED=/bin/sed
 
+#find in the already present certificates the xmpp of the VSD, attach it to the variable URL
 URL=`${OPENSSL} x509 -in ${KEYS_DIR}/${PROXY_USER}.pem -noout -text | ${GREP} cmd=crl | ${AWK} -F: '{ st = index($0,":");print substr($0,st+1)}'`
 
+#place URL in our tmp file url.txt
+echo "this is the URL before changing: $URL"
+echo "$URL" > $TMP_URL
+
+#look in the url file for the xmpp and replace it by the loadbalancer IP
+$SED -i 's/xmpp.*7080/'$IP_LOADBALANCER':'$PORT_LOADBALANCER'/g' $TMP_URL
+
+#Replace URL with the value front the edited file TMP_URL
+URL=$(cat $TMP_URL)
+echo "this is the URL AFTER changing: $URL"
+
+#Error in case the URL file is empty
 if [ "$URL" == "" ]
 then
     echo "Unable to parse CRL from certificate file ${KEYS_DIR}/${PROXY_USER}.pem"
@@ -33,6 +51,7 @@ fi
 echo "" > ${TMP_CONCAT_CRL_FILE}
 
 CRL_NO_TOTAL=0
+
 
 echo DER $URL > ${EXTERNAL_CRL_LOCATION_TMP}
 ${GREP} -v ^# ${EXTERNAL_CRL_LOCATION} | ${GREP} -v ^$ >> ${EXTERNAL_CRL_LOCATION_TMP}
@@ -59,7 +78,6 @@ if [ -f ${LAST_CRL_NUM_FILE} ]; then
     if [ "$CRL_NO_TOTAL" != "$LAST_CRL_NO" ]; then
         # The numbers are no longer matching, must reload.
         ${CAT} ${TMP_CONCAT_CRL_FILE} > ${CRL_FILE}
-
         ${ECHO} 'CRL Numbers no longer matching.  Reloading CRL profile.'
 mv $CRL_FILE $VSPCA_FILE
 sshpass -p "default" scp $VSPCA_FILE root@10.171.47.23:/tmp/
@@ -71,8 +89,10 @@ else
     # The file doesn't exist yet.  Need to reload proxy service and save the CRL Number.
     # reload haproxy config if already started
     ${CAT} ${TMP_CONCAT_CRL_FILE} > ${CRL_FILE}
-
       ${ECHO} 'Reloading CRL profile.'
-#        tmsh modify sys file ssl-crl vspca.crl source-path file:/root/crl_location/vspca.pem
+mv $CRL_FILE $VSPCA_FILE
+sshpass -p "default" scp $VSPCA_FILE root@10.171.47.23:/tmp/
+sshpass -p "default" ssh root@10.171.47.23 tmsh modify sys file ssl-crl vspca.crl source-path file:/tmp/vspca.pem
+# Update the lastCrlNumber file with the new number
     ${ECHO} $CRL_NO_TOTAL > ${LAST_CRL_NUM_FILE}
 fi
